@@ -1,1 +1,1 @@
-pip install protobuf sentencepiece
+pip install protobuf sentencepiece transformers
