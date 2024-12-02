@@ -1,4 +1,4 @@
-from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
+from transformers import LlamaForCausalLM, AutoTokenizer
 import os
 from pathlib import Path
 import torch
@@ -21,7 +21,7 @@ class AdansoniaModel:
 
     def _load_model(self):
         print("Loading model from cache or downloading...")
-        self._model = AutoModel.from_pretrained(
+        self._model = LlamaForCausalLM.from_pretrained(
             "Adansonia/internal_audit_16bit",
             cache_dir=str(self._cache_dir),
             local_files_only=False
