@@ -1,4 +1,4 @@
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import os
 from pathlib import Path
 import torch
@@ -33,33 +33,34 @@ class AdansoniaModel:
         )
         print("Model loaded successfully!")
 
-    def process_text(self, text):
+    def generate_text(self, prompt, max_length=1024):
         # 입력 텍스트를 토큰화
-        inputs = self._tokenizer(text, return_tensors="pt", padding=True, truncation=True)
+        inputs = self._tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
         
-        # 모델 추론
-        with torch.no_grad():  # 그래디언트 계산 비활성화
-            outputs = self._model(**inputs)
+        # 텍스트 생성
+        with torch.no_grad():
+            outputs = self._model.generate(
+                inputs["input_ids"],
+                max_length=max_length,
+                num_return_sequences=1,
+                temperature=0.1,
+                pad_token_id=self._tokenizer.pad_token_id,
+                eos_token_id=self._tokenizer.eos_token_id,
+            )
         
-        # 모델 출력을 디코딩
-        last_hidden_state = outputs.last_hidden_state
-        # 첫 번째 토큰([CLS])의 임베딩을 사용
-        sentence_embedding = last_hidden_state[:, 0, :]
+        # 생성된 텍스트 디코딩
+        generated_text = self._tokenizer.decode(outputs[0], skip_special_tokens=True)
         
-        print(f"\n입력 텍스트: {text}")
-        print(f"임베딩 shape: {sentence_embedding.shape}")
-        print(f"출력 텐서의 일부: {sentence_embedding[0][:5]}")  # 처음 5개 값만 출력
-        
-        return sentence_embedding
+        return generated_text
 
 def interactive_test():
     model = AdansoniaModel.get_instance()
     
-    print("\n=== Adansonia 모델 테스트 ===")
+    print("\n=== Adansonia 텍스트 생성 테스트 ===")
     print("종료하려면 'quit' 또는 'exit'를 입력하세요.")
     
     while True:
-        user_input = input("\n텍스트를 입력하세요: ").strip()
+        user_input = input("\n프롬프트를 입력하세요: ").strip()
         
         if user_input.lower() in ['quit', 'exit']:
             print("프로그램을 종료합니다.")
@@ -70,7 +71,9 @@ def interactive_test():
             continue
         
         try:
-            _ = model.process_text(user_input)
+            generated_text = model.generate_text(user_input)
+            print("\n생성된 텍스트:")
+            print(generated_text)
         except Exception as e:
             print(f"에러 발생: {str(e)}")
 
