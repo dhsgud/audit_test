@@ -1,78 +1,30 @@
-from transformers import LlamaForCausalLM, PreTrainedTokenizerFast
-import os
-from pathlib import Path
-import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-class AdansoniaLLM:
-    def __init__(self, model_name="Adansonia/internal_audit_16bit", cache_dir=None):
-        if cache_dir is None:
-            cache_dir = Path.home() / '.cache' / 'adansonia_model'
-        os.makedirs(cache_dir, exist_ok=True)
+model = AutoModelForCausalLM.from_pretrained(
+    "Adansonia/internal_audit_16bit",
+    torch_dtype="auto",
+    device_map="auto"
+)
+tokenizer = AutoTokenizer.from_pretrained("Adansonia/internal_audit_16bit")
 
-        print(f"Loading {model_name}...")
-        self.model = LlamaForCausalLM.from_pretrained(
-            model_name,
-            cache_dir=str(cache_dir),
-            local_files_only=False
-        )
-        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(
-            model_name,
-            cache_dir=str(cache_dir),
-            local_files_only=False
-        )
-        
-        self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.tokenizer.padding_side = "right"
-        print("Model loaded successfully!")
+def generate_response(prompt):
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": prompt}
+    ]
+    text = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True
+    )
+    model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
-    def __call__(self, prompt, temperature=0.1, max_length=1024):
-        """Ollama처럼 직접 호출 가능한 인터페이스"""
-        inputs = self.tokenizer(
-            prompt,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            add_special_tokens=True,
-            return_attention_mask=True
-        )
-        
-        with torch.no_grad():
-            outputs = self.model.generate(
-                input_ids=inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                max_length=max_length,
-                temperature=temperature,
-                do_sample=True,
-                pad_token_id=self.tokenizer.pad_token_id,
-                eos_token_id=self.tokenizer.eos_token_id,
-                bos_token_id=self.tokenizer.bos_token_id,
-            )
-        
-        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+    generated_ids = model.generate(
+        **model_inputs,
+        max_new_tokens=512
+    )
+    generated_ids = [
+        output_ids[len(input_ids):] for input_ids, output_ids in zip(model_inputs.input_ids, generated_ids)
+    ]
 
-def main():
-    # Ollama처럼 모델 인스턴스 생성
-    llm = AdansoniaLLM()
-    
-    print("\n=== Adansonia LLM 테스트 ===")
-    print("종료하려면 'quit' 또는 'exit'를 입력하세요.")
-    
-    while True:
-        prompt = input("\n>>> ").strip()
-        
-        if prompt.lower() in ['quit', 'exit']:
-            print("프로그램을 종료합니다.")
-            break
-        
-        if not prompt:
-            continue
-        
-        try:
-            # Ollama처럼 직접 호출
-            response = llm(prompt)
-            print("\n" + response)
-        except Exception as e:
-            print(f"에러 발생: {str(e)}")
-
-if __name__ == "__main__":
-    main()
+    return tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
