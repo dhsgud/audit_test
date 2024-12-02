@@ -1,4 +1,4 @@
-from transformers import LlamaForCausalLM, AutoTokenizer, LlamaTokenizer
+from transformers import LlamaForCausalLM, PreTrainedTokenizerFast
 import os
 from pathlib import Path
 import torch
@@ -21,16 +21,20 @@ class AdansoniaModel:
 
     def _load_model(self):
         print("Loading model from cache or downloading...")
+        model_name = "Adansonia/internal_audit_16bit"
+        
         self._model = LlamaForCausalLM.from_pretrained(
-            "Adansonia/internal_audit_16bit",
+            model_name,
             cache_dir=str(self._cache_dir),
             local_files_only=False
         )
-        self._tokenizer = LlamaTokenizer.from_pretrained(
-            "Adansonia/internal_audit_16bit",
+        
+        self._tokenizer = PreTrainedTokenizerFast.from_pretrained(
+            model_name,
             cache_dir=str(self._cache_dir),
             local_files_only=False
         )
+        
         # 토크나이저 설정
         self._tokenizer.pad_token = self._tokenizer.eos_token
         self._tokenizer.padding_side = "right"
