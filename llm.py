@@ -1,4 +1,4 @@
-from transformers import LlamaForCausalLM, AutoTokenizer
+from transformers import LlamaForCausalLM, AutoTokenizer, LlamaTokenizer
 import os
 from pathlib import Path
 import torch
@@ -26,26 +26,39 @@ class AdansoniaModel:
             cache_dir=str(self._cache_dir),
             local_files_only=False
         )
-        self._tokenizer = AutoTokenizer.from_pretrained(
+        self._tokenizer = LlamaTokenizer.from_pretrained(
             "Adansonia/internal_audit_16bit",
             cache_dir=str(self._cache_dir),
             local_files_only=False
         )
+        # 토크나이저 설정
+        self._tokenizer.pad_token = self._tokenizer.eos_token
+        self._tokenizer.padding_side = "right"
         print("Model loaded successfully!")
 
     def generate_text(self, prompt, max_length=1024):
         # 입력 텍스트를 토큰화
-        inputs = self._tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
+        inputs = self._tokenizer(
+            prompt,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            add_special_tokens=True,
+            return_attention_mask=True
+        )
         
         # 텍스트 생성
         with torch.no_grad():
             outputs = self._model.generate(
-                inputs["input_ids"],
+                input_ids=inputs["input_ids"],
+                attention_mask=inputs["attention_mask"],
                 max_length=max_length,
                 num_return_sequences=1,
                 temperature=0.1,
+                do_sample=True,
                 pad_token_id=self._tokenizer.pad_token_id,
                 eos_token_id=self._tokenizer.eos_token_id,
+                bos_token_id=self._tokenizer.bos_token_id,
             )
         
         # 생성된 텍스트 디코딩
