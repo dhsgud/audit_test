@@ -3,46 +3,31 @@ import os
 from pathlib import Path
 import torch
 
-class AdansoniaModel:
-    _instance = None
-    _cache_dir = Path.home() / '.cache' / 'adansonia_model'
-    _model = None
-    _tokenizer = None
+class AdansoniaLLM:
+    def __init__(self, model_name="Adansonia/internal_audit_16bit", cache_dir=None):
+        if cache_dir is None:
+            cache_dir = Path.home() / '.cache' / 'adansonia_model'
+        os.makedirs(cache_dir, exist_ok=True)
 
-    def __init__(self):
-        os.makedirs(self._cache_dir, exist_ok=True)
-        self._load_model()
-
-    @classmethod
-    def get_instance(cls):
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
-    def _load_model(self):
-        print("Loading model from cache or downloading...")
-        model_name = "Adansonia/internal_audit_16bit"
-        
-        self._model = LlamaForCausalLM.from_pretrained(
+        print(f"Loading {model_name}...")
+        self.model = LlamaForCausalLM.from_pretrained(
             model_name,
-            cache_dir=str(self._cache_dir),
+            cache_dir=str(cache_dir),
+            local_files_only=False
+        )
+        self.tokenizer = PreTrainedTokenizerFast.from_pretrained(
+            model_name,
+            cache_dir=str(cache_dir),
             local_files_only=False
         )
         
-        self._tokenizer = PreTrainedTokenizerFast.from_pretrained(
-            model_name,
-            cache_dir=str(self._cache_dir),
-            local_files_only=False
-        )
-        
-        # 토크나이저 설정
-        self._tokenizer.pad_token = self._tokenizer.eos_token
-        self._tokenizer.padding_side = "right"
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.padding_side = "right"
         print("Model loaded successfully!")
 
-    def generate_text(self, prompt, max_length=1024):
-        # 입력 텍스트를 토큰화
-        inputs = self._tokenizer(
+    def __call__(self, prompt, temperature=0.1, max_length=1024):
+        """Ollama처럼 직접 호출 가능한 인터페이스"""
+        inputs = self.tokenizer(
             prompt,
             return_tensors="pt",
             padding=True,
@@ -51,48 +36,43 @@ class AdansoniaModel:
             return_attention_mask=True
         )
         
-        # 텍스트 생성
         with torch.no_grad():
-            outputs = self._model.generate(
+            outputs = self.model.generate(
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 max_length=max_length,
-                num_return_sequences=1,
-                temperature=0.1,
+                temperature=temperature,
                 do_sample=True,
-                pad_token_id=self._tokenizer.pad_token_id,
-                eos_token_id=self._tokenizer.eos_token_id,
-                bos_token_id=self._tokenizer.bos_token_id,
+                pad_token_id=self.tokenizer.pad_token_id,
+                eos_token_id=self.tokenizer.eos_token_id,
+                bos_token_id=self.tokenizer.bos_token_id,
             )
         
-        # 생성된 텍스트 디코딩
-        generated_text = self._tokenizer.decode(outputs[0], skip_special_tokens=True)
-        
-        return generated_text
+        return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-def interactive_test():
-    model = AdansoniaModel.get_instance()
+def main():
+    # Ollama처럼 모델 인스턴스 생성
+    llm = AdansoniaLLM()
     
-    print("\n=== Adansonia 텍스트 생성 테스트 ===")
+    print("\n=== Adansonia LLM 테스트 ===")
     print("종료하려면 'quit' 또는 'exit'를 입력하세요.")
     
     while True:
-        user_input = input("\n프롬프트를 입력하세요: ").strip()
+        prompt = input("\n>>> ").strip()
         
-        if user_input.lower() in ['quit', 'exit']:
+        if prompt.lower() in ['quit', 'exit']:
             print("프로그램을 종료합니다.")
             break
         
-        if not user_input:
-            print("텍스트를 입력해주세요!")
+        if not prompt:
             continue
         
         try:
-            generated_text = model.generate_text(user_input)
-            print("\n생성된 텍스트:")
-            print(generated_text)
+            # Ollama처럼 직접 호출
+            response = llm(prompt)
+            print("\n" + response)
         except Exception as e:
             print(f"에러 발생: {str(e)}")
 
 if __name__ == "__main__":
-    interactive_test()
+    main()
